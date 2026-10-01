@@ -1,8 +1,60 @@
+import { useState } from "react";
+import { useParams } from "react-router-dom";
+import type { IThumbnail } from "../assests/assets";
+import SoftBackdrop from "../components/SoftBackdrop";
 
 
 const Generate = () => {
+
+  const { id } = useParams();
+  const [title, setTitle] = useState('');
+  const [additionalDetails, setAdditionalDetails] = useState('')
+  const [thumbnail, setThumbnail] = useState<IThumbnail | null>(null)
+  const [loading, setLoading] = useState(false)
+
   return (
-    <div>Generate</div>
+    <>
+      <SoftBackdrop />
+      <div className="pt-24 min-h-screen ">
+        <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-28 lg:pb-8">
+          <div className="grid lg:grid-cols-[400px_fr] gap-8">
+            {/*left panel */}
+            <div className={`w-fit space-y-6 ${id && 'pointer-events-none'}`}>
+              <div className="p-6 rounded-2xl bg-white/8 border border-white/12 shadow-xl space-y-6">
+                <div className="space-y-1">
+                  <h2 className="text-xl font-bold text-zinc-100">Create your Thumbnail</h2>
+                  <p className="text-sm text-zinc-400">Describe your vision and let AI bring it to life</p>
+                </div>
+
+                <div className="space-y-5">
+                {/*title input */}
+                  <label className="block text-sm font-medium">Title or Topic</label>
+                  <input type="text" value={title} onChange={(e)=>setTitle(e.target.value)} maxLength={100} placeholder="e.g. , 10 Tips for better sleep" className="w-full px-4 py-3 rounded-lg border border-white/12 bg-black/20 text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-pink-500" />
+                  <div className="flex justify-end ">
+                    <span className="text-white/70">{title.length}/100</span>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <label className="block text-sm font-meduim">Additional Details <span className="text-zinc-400 text-xs">(optional)</span></label>
+                  <textarea value={additionalDetails} onChange={(e)=>setAdditionalDetails(e.target.value)} rows={3} placeholder="add any specific elements, style and preferences..." className="w-full px-4 py-3 rounded-lg border border-white/10 bg-white/6 text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-pink-500 resize-none"/>
+                </div>
+                {/*button */}
+                {!id && (
+                  <button className="text-[15px] w-full py-3.5 rounded-xl font-medium bg-linear-to-b from-pink-500 to-pink-600 hover:from-pink-700 disabled:cursor-not-allowed transition-colors">
+                    {loading ? 'Generating...' : 'Generate Thumbnail'}
+                  </button>
+                )}
+              </div>
+            </div>
+            {/*right panel */}
+            <div>
+
+            </div>
+          </div>
+        </main>
+      </div>
+    </>
   )
 }
 
