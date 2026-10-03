@@ -4,6 +4,7 @@ import { colorSchemes, type AspectRatio, type IThumbnail, type ThumbnailStyle } 
 import SoftBackdrop from "../components/SoftBackdrop";
 import AspectRatioSelector from "../components/AspectRatioSelector";
 import StyleSelector from "../components/StyleSelector";
+import ColorSchemeSelector from "../components/ColorSchemeSelector";
 
 
 const Generate = () => {
@@ -45,6 +46,8 @@ const Generate = () => {
                 <AspectRatioSelector value={aspectRatio} onChange={setAspectRatio}/>
 
                 <StyleSelector value={style} onChange={setStyle} isOpen={styleDropdownOpen} setIsOpen={setStyleDropdownOpen} />
+
+                <ColorSchemeSelector value={colorSchemeId} onChange={setColorSchemeId}/>
                 <div className="space-y-3">
                   <label className="block text-sm font-meduim">Additional Details <span className="text-zinc-400 text-xs">(optional)</span></label>
                   <textarea value={additionalDetails} onChange={(e)=>setAdditionalDetails(e.target.value)} rows={3} placeholder="add any specific elements, style and preferences..." className="w-full px-4 py-3 rounded-lg border border-white/10 bg-white/6 text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-pink-500 resize-none"/>
