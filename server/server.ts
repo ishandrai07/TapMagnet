@@ -1,6 +1,13 @@
 import "dotenv/config";
 import express, { Request, Response } from 'express';
 import cors from "cors";
+import 'dotenv/config'
+import connectDB from "./configs/db.js";
+
+import dns from 'node:dns';
+dns.setServers(['8.8.8.8', '8.8.4.4']);
+
+await connectDB()
 
 const app = express();
 
@@ -17,3 +24,7 @@ app.get('/', (req: Request, res: Response) => {
 app.listen(port, () => {
     console.log(`Server is running at http://localhost:${port}`);
 });
+
+//ishandrai14xth_db_user
+//LmTMmILENXrf7fzF
+//mongodb+srv://ishandrai14xth_db_user:<db_password>@cluster0.0qb0pff.mongodb.net/
