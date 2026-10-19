@@ -48,6 +48,3 @@ app.listen(port, () => {
     console.log(`Server is running at http://localhost:${port}`);
 });
 
-//ishandrai14xth_db_user
-//LmTMmILENXrf7fzF
-//mongodb+srv://ishandrai14xth_db_user:<db_password>@cluster0.0qb0pff.mongodb.net/
