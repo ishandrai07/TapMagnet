@@ -4,7 +4,7 @@ import bcrypt from "bcrypt"
 
 // register
 
-export const Register = async (req:Request , res:Response)=>{
+export const RegisterUser = async (req:Request , res:Response)=>{
 
     try {
         const {name, email, password } = req.body
