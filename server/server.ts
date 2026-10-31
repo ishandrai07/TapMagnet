@@ -8,6 +8,8 @@ import MongoStore from "connect-mongo"
 
 import dns from 'node:dns';
 import AuthRouter from "./routes/AuthRoutes.js";
+import ThumbnailRouter from "./routes/ThumbnailRoutes.js";
+import UserRouter from "./routes/UserRoutes.js";
 dns.setServers(['8.8.8.8', '8.8.4.4']);
 
 declare module 'express-session'{
@@ -45,6 +47,8 @@ app.get('/', (req: Request, res: Response) => {
     res.send('Server is Live!');
 });
 app.use('/api/auth', AuthRouter)
+app.use('/api/thumbnail', ThumbnailRouter)
+app.use('/api/user', UserRouter)
 
 app.listen(port, () => {
     console.log(`Server is running at http://localhost:${port}`);
