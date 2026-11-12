@@ -77,9 +77,11 @@ export const AuthProvider = ({children}:{children: React.ReactNode})=>{
                 setIsLoggedIn(true)
             }
             
-        } catch (error) {
-            console.log(error);
-            
+        } catch (error: any) {
+            // 401 is expected when user is not logged in — not a real error
+            if(error?.response?.status !== 401){
+                console.log(error);
+            }
         }
     }
 

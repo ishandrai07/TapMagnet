@@ -3,8 +3,15 @@ import Thumbnail from "../models/Thumbnail.js";
 import { GenerateContentConfig } from "@google/genai";
 import ai from "../configs/ai.js";
 import path from "node:path";
-import  fs  from "fs";
-import {v2 as cloudinary} from 'cloudinary'
+import fs from "fs";
+import { v2 as cloudinary } from 'cloudinary';
+
+// Configure Cloudinary from env
+cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 
 const stylePrompts = {
     'Bold & Graphic': 'eye-catching thumbnail, bold typography, vibrant colors, expressive facial reaction, dramatic lighting, high contrast, click-worthy composition, professional style',
@@ -12,7 +19,7 @@ const stylePrompts = {
     'Minimalist': 'minimalist thumbnail, clean layout, simple shapes, limited color palette, plenty of negative space, modern flat design, clear focal point',
     'Photorealistic': 'photorealistic thumbnail, ultra-realistic lighting, natural skin tones, candid moment, DSLR-style photography, lifestyle realism, shallow depth of field',
     'Illustrated': 'illustrated thumbnail, custom digital illustration, stylized characters, bold outlines, vibrant colors, creative cartoon or vector art style',
-}
+};
 
 const colorSchemeDescriptions = {
     vibrant: 'vibrant and energetic colors, high saturation, bold contrasts, eye-catching palette',
@@ -22,13 +29,13 @@ const colorSchemeDescriptions = {
     purple: 'purple-dominant color palette, magenta and violet tones, modern and stylish mood',
     monochrome: 'black and white color scheme, high contrast, dramatic lighting, timeless aesthetic',
     ocean: 'cool blue and teal tones, aquatic color palette, fresh and clean atmosphere',
-    pastel:'soft pastel colors, low saturation, gentle tones, calm and friendly aesthetic',
-}
+    pastel: 'soft pastel colors, low saturation, gentle tones, calm and friendly aesthetic',
+};
 
-export const generateThumbnail = async (req:Request, res:Response)=>{
+export const generateThumbnail = async (req: Request, res: Response) => {
     try {
-        const {userId} = req.session;
-        const {title, prompt:user_prompt, style, aspect_ratio, color_scheme, text_overlay} = req.body;
+        const { userId } = req.session;
+        const { title, prompt: user_prompt, style, aspect_ratio, color_scheme, text_overlay } = req.body;
 
         const thumbnail = await Thumbnail.create({
             userId,
@@ -39,97 +46,93 @@ export const generateThumbnail = async (req:Request, res:Response)=>{
             aspect_ratio,
             color_scheme,
             text_overlay,
-            isGenerating:true
-        })
+            isGenerating: true
+        });
 
-        const model = 'gemini-2.0-flash-preview-image-generation';
-        const generationconfig:GenerateContentConfig = {
-            temperature:1,
-            topP:0.95,
-            responseModalities:['IMAGE'],
-            imageConfig:{
-                aspectRatio: aspect_ratio ||'16:9',
-                imageSize:'1K',
-
+        const model = 'gemini-2.5-flash-image';
+        const generationconfig: GenerateContentConfig = {
+            temperature: 1,
+            topP: 0.95,
+            responseModalities: ['IMAGE'],
+            imageConfig: {
+                aspectRatio: aspect_ratio || '16:9',
             },
-            // safetySettings:[]
-        }
-        let prompt = `Create a ${stylePrompts[style as keyof typeof stylePrompts]} for:"${title}"`;
+        };
 
-        if(color_scheme){
-            prompt +=`use a ${colorSchemeDescriptions[color_scheme as keyof typeof colorSchemeDescriptions]} color scheme.`
-        }
+        let prompt = `Create a ${stylePrompts[style as keyof typeof stylePrompts]} for: "${title}". `;
 
-        if(user_prompt){
-            prompt += `Additional details:${user_prompt}.`;
+        if (color_scheme) {
+            prompt += `Use a ${colorSchemeDescriptions[color_scheme as keyof typeof colorSchemeDescriptions]} color scheme. `;
         }
 
-        prompt += `The thumbnail should be ${aspect_ratio}, visually stunning , and designed to maximize click-through rate. Make it bold , professional, and impossible to ignore. `
+        if (user_prompt) {
+            prompt += `Additional details: ${user_prompt}. `;
+        }
+
+        prompt += `The thumbnail should be ${aspect_ratio || '16:9'}, visually stunning, and designed to maximize click-through rate. Make it bold, professional, and impossible to ignore.`;
 
         // generate the image using ai model
-        const response: any  = await ai.models.generateContent({
+        const response: any = await ai.models.generateContent({
             model,
             contents: [prompt],
-            config:generationconfig
-        })
+            config: generationconfig
+        });
 
         // check if the response is valid
-        if(!response?.candidates?.[0]?.content?.parts){
-            throw new Error('Unexpected response')
+        if (!response?.candidates?.[0]?.content?.parts) {
+            throw new Error('Unexpected response from AI model');
         }
 
         const parts = response.candidates[0].content.parts;
 
         let finalBuffer: Buffer | null = null;
-        for(const part of parts){
-            if(part.inlineData){
-                finalBuffer = Buffer.from(part.inlineData, 'base64')
+        for (const part of parts) {
+            if (part.inlineData?.data) {
+                finalBuffer = Buffer.from(part.inlineData.data, 'base64');
             }
+        }
+
+        if (!finalBuffer) {
+            throw new Error('No image data returned from AI model');
         }
 
         const filename = `final-output-${Date.now()}.png`;
         const filepath = path.join('images', filename);
 
         // create the images directory if it doesn't exist
+        fs.mkdirSync('images', { recursive: true });
 
-        fs.mkdirSync('images', {recursive:true})
+        // write the final image to the file
+        fs.writeFileSync(filepath, finalBuffer);
 
-        //write the final image to the file
-        fs.writeFileSync(filepath, finalBuffer!);
+        const uploadResult = await cloudinary.uploader.upload(filepath, { resource_type: 'image' });
 
-        const uploadResult = await cloudinary.uploader.upload(filepath,{resource_type:'image'})
-
-        thumbnail.image_url = uploadResult.url;
+        thumbnail.image_url = uploadResult.secure_url || uploadResult.url;
         thumbnail.isGenerating = false;
-        await thumbnail.save()
+        await thumbnail.save();
 
-        res.json({message: 'Thumbnail Generated', thumbnail})
+        res.json({ message: 'Thumbnail Generated', thumbnail });
 
-        //remove image file from disk
+        // remove image file from disk
+        fs.unlinkSync(filepath);
 
-        fs.unlinkSync(filepath)
-
-    } catch (error:any) {
+    } catch (error: any) {
         console.log(error);
-        res.status(500).json({message: error.message});
-        
+        res.status(500).json({ message: error.message });
     }
-}
-
+};
 
 // delete thumbnail
-
-export const deleteThumbnail = async (req:Request , res:Response)=>{
+export const deleteThumbnail = async (req: Request, res: Response) => {
     try {
-        const {id} = req.params;
-        const {userId} = req.session;
+        const { id } = req.params;
+        const { userId } = req.session;
 
-        await Thumbnail.findByIdAndDelete({_id: id, userId})
+        await Thumbnail.findByIdAndDelete({ _id: id, userId });
 
-        res.json({message:'Thumbnail deleted successfully'});
-    } catch (error:any) {
+        res.json({ message: 'Thumbnail deleted successfully' });
+    } catch (error: any) {
         console.log(error);
-        res.status(500).json({message:error.message})
-        
+        res.status(500).json({ message: error.message });
     }
-}
+};

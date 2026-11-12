@@ -23,7 +23,7 @@ export const RegisterUser = async (req:Request , res:Response)=>{
 
         // setting user data in session 
         req.session.isLoggedIn = true;
-        req.session.userId = newUser._id;
+        req.session.userId = newUser._id.toString();
 
         return res.json({
             message: 'Account created successfully',
@@ -55,7 +55,7 @@ export const loginUser = async (req:Request, res:Response)=>{
             return res.status(400).json({message:'Invalid email or password'})
         }
         req.session.isLoggedIn = true;
-        req.session.userId = user._id;
+        req.session.userId = user._id.toString();
 
         return res.json({
             message:'Login successfully',
@@ -93,11 +93,16 @@ export const LogoutUser = async (req:Request , res:Response) =>{
 
 export const verifyUser  = async (req:Request , res:Response)=>{
     try {
-        const {userId} = req.session
+        const {userId, isLoggedIn} = req.session
+
+        // No active session — return 401 cleanly (not an error, just not logged in)
+        if(!isLoggedIn || !userId){
+            return res.status(401).json({message:'Not authenticated'});
+        }
 
         const user  = await User.findById(userId).select('-password') 
         if(!user){
-            return res.status(400).json({message:'Invalid user'});
+            return res.status(401).json({message:'User not found'});
         }
 
         return res.json({user});
