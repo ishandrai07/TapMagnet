@@ -1,20 +1,17 @@
-import { Request, Response } from "express"
+import { Request, Response } from "express";
 import Thumbnail from "../models/Thumbnail.js";
-import { GenerateContentConfig } from "@google/genai";
-import ai from "../configs/ai.js";
-import path from "node:path";
-import fs from "fs";
-import { v2 as cloudinary } from 'cloudinary';
+import { v2 as cloudinary } from "cloudinary";
 
-// Configure Cloudinary from env
+// Configure Cloudinary
 cloudinary.config({
     cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
     api_key: process.env.CLOUDINARY_API_KEY,
     api_secret: process.env.CLOUDINARY_API_SECRET,
+    secure: true,
 });
 
 const stylePrompts = {
-    'Bold & Graphic': 'eye-catching thumbnail, bold typography, vibrant colors, expressive facial reaction, dramatic lighting, high contrast, click-worthy composition, professional style',
+    'Bold & Graphic': 'eye-catching thumbnail, bold typography, vibrant colors, expressive facial reaction, dramatic lighting, high contrast, click-worthy composition, professional YouTube style',
     'Tech/Futuristic': 'futuristic thumbnail, sleek modern design, digital UI elements, glowing accents, holographic effects, cyber-tech aesthetic, sharp lighting, high-tech atmosphere',
     'Minimalist': 'minimalist thumbnail, clean layout, simple shapes, limited color palette, plenty of negative space, modern flat design, clear focal point',
     'Photorealistic': 'photorealistic thumbnail, ultra-realistic lighting, natural skin tones, candid moment, DSLR-style photography, lifestyle realism, shallow depth of field',
@@ -32,11 +29,19 @@ const colorSchemeDescriptions = {
     pastel: 'soft pastel colors, low saturation, gentle tones, calm and friendly aesthetic',
 };
 
+// Map aspect ratio → pixel dimensions for Pollinations
+const aspectRatioDimensions: Record<string, { width: number; height: number }> = {
+    '16:9': { width: 1280, height: 720 },
+    '1:1':  { width: 1024, height: 1024 },
+    '9:16': { width: 720,  height: 1280 },
+};
+
 export const generateThumbnail = async (req: Request, res: Response) => {
     try {
         const { userId } = req.session;
         const { title, prompt: user_prompt, style, aspect_ratio, color_scheme, text_overlay } = req.body;
 
+        // 1. Create thumbnail record immediately (isGenerating = true)
         const thumbnail = await Thumbnail.create({
             userId,
             title,
@@ -46,75 +51,57 @@ export const generateThumbnail = async (req: Request, res: Response) => {
             aspect_ratio,
             color_scheme,
             text_overlay,
-            isGenerating: true
+            isGenerating: true,
         });
 
-        const model = 'gemini-2.5-flash-image';
-        const generationconfig: GenerateContentConfig = {
-            temperature: 1,
-            topP: 0.95,
-            responseModalities: ['IMAGE'],
-            imageConfig: {
-                aspectRatio: aspect_ratio || '16:9',
-            },
-        };
-
-        let prompt = `Create a ${stylePrompts[style as keyof typeof stylePrompts]} for: "${title}". `;
+        // 2. Build the image prompt
+        let prompt = `YouTube thumbnail, ${stylePrompts[style as keyof typeof stylePrompts]}, topic: "${title}"`;
 
         if (color_scheme) {
-            prompt += `Use a ${colorSchemeDescriptions[color_scheme as keyof typeof colorSchemeDescriptions]} color scheme. `;
+            prompt += `, ${colorSchemeDescriptions[color_scheme as keyof typeof colorSchemeDescriptions]}`;
         }
 
         if (user_prompt) {
-            prompt += `Additional details: ${user_prompt}. `;
+            prompt += `, ${user_prompt}`;
         }
 
-        prompt += `The thumbnail should be ${aspect_ratio || '16:9'}, visually stunning, and designed to maximize click-through rate. Make it bold, professional, and impossible to ignore.`;
+        prompt += `, visually stunning, maximizes click-through rate, bold, professional, no watermarks, no text borders`;
 
-        // generate the image using ai model
-        const response: any = await ai.models.generateContent({
-            model,
-            contents: [prompt],
-            config: generationconfig
+        // 3. Get dimensions from aspect ratio
+        const { width, height } = aspectRatioDimensions[aspect_ratio] || aspectRatioDimensions['16:9'];
+
+        // 4. Build Pollinations URL with API key
+        const encodedPrompt = encodeURIComponent(prompt);
+        const model = 'black-forest-labs/flux.1-schnell';
+        const pollinationsUrl = `https://gen.pollinations.ai/image/${encodedPrompt}?model=${encodeURIComponent(model)}&width=${width}&height=${height}&nologo=true`;
+
+        // 5. Fetch image buffer from Pollinations using Bearer token
+        const imageResponse = await fetch(pollinationsUrl, {
+            headers: {
+                'Authorization': `Bearer ${process.env.POLLINATIONS_API_KEY}`,
+                'Accept': 'image/jpeg,image/png,image/*',
+            },
         });
 
-        // check if the response is valid
-        if (!response?.candidates?.[0]?.content?.parts) {
-            throw new Error('Unexpected response from AI model');
+        if (!imageResponse.ok) {
+            throw new Error(`Pollinations API error: ${imageResponse.status} ${imageResponse.statusText}`);
         }
 
-        const parts = response.candidates[0].content.parts;
+        // 6. Convert to base64 buffer and upload directly to Cloudinary
+        const arrayBuffer = await imageResponse.arrayBuffer();
+        const base64Data = `data:image/jpeg;base64,${Buffer.from(arrayBuffer).toString('base64')}`;
 
-        let finalBuffer: Buffer | null = null;
-        for (const part of parts) {
-            if (part.inlineData?.data) {
-                finalBuffer = Buffer.from(part.inlineData.data, 'base64');
-            }
-        }
+        const uploadResult = await cloudinary.uploader.upload(base64Data, {
+            folder: 'thumbnails',
+            resource_type: 'image',
+        });
 
-        if (!finalBuffer) {
-            throw new Error('No image data returned from AI model');
-        }
-
-        const filename = `final-output-${Date.now()}.png`;
-        const filepath = path.join('images', filename);
-
-        // create the images directory if it doesn't exist
-        fs.mkdirSync('images', { recursive: true });
-
-        // write the final image to the file
-        fs.writeFileSync(filepath, finalBuffer);
-
-        const uploadResult = await cloudinary.uploader.upload(filepath, { resource_type: 'image' });
-
-        thumbnail.image_url = uploadResult.secure_url || uploadResult.url;
+        // 7. Update thumbnail with permanent Cloudinary URL
+        thumbnail.image_url = uploadResult.secure_url;
         thumbnail.isGenerating = false;
         await thumbnail.save();
 
         res.json({ message: 'Thumbnail Generated', thumbnail });
-
-        // remove image file from disk
-        fs.unlinkSync(filepath);
 
     } catch (error: any) {
         console.log(error);

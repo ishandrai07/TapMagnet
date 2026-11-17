@@ -11,13 +11,23 @@ const PreviewPanel = ({thumbnail, isLoading, aspectRatio} : {thumbnail:IThumbnai
         '9:16' : 'aspect-[9/16]',
     } as Record<AspectRatio , string>;
 
-    const onDownload = ()=>{
+    const onDownload = async ()=>{
         if(!thumbnail?.image_url) return;
-        const link = document.createElement('a');
-        link.href = thumbnail?.image_url.replace('/upload', 'upload/fl_attachment')
-        document.body.appendChild(link);
-        link.click()
-        link.remove()
+        try {
+            const response = await fetch(thumbnail.image_url);
+            const blob = await response.blob();
+            const blobUrl = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = blobUrl;
+            link.download = `${thumbnail.title || 'thumbnail'}.jpg`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(blobUrl);
+        } catch {
+            // fallback: open in new tab
+            window.open(thumbnail.image_url, '_blank');
+        }
     }
   return (
 
